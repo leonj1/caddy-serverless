@@ -4,15 +4,35 @@ A Caddy plugin that enables serverless function execution using Docker container
 
 ## Installation
 
-### Using xcaddy (recommended)
+### Docker-based Installation (No Go Required)
 
-The easiest way to use this plugin is to build a custom Caddy binary with [xcaddy](https://github.com/caddyserver/xcaddy):
+If you don't have Go installed, you can build Caddy with the serverless plugin using Docker:
+
+```bash
+# Quick install using the provided script
+./install.sh local  # Builds to ./build/caddy
+
+# Or install system-wide (requires sudo)
+sudo ./install.sh system
+
+# Or use Make directly
+make docker-install
+```
+
+The Docker-based installation will:
+- Build Caddy with the serverless plugin using Docker
+- Save the binary to `./build/caddy`
+- Show instructions for system-wide installation
+
+### Using xcaddy (requires Go)
+
+If you have Go installed, you can use [xcaddy](https://github.com/caddyserver/xcaddy):
 
 ```bash
 xcaddy build --with github.com/jose/caddy-serverless
 ```
 
-### Building from source
+### Building from source (requires Go)
 
 ```bash
 git clone https://github.com/jose/caddy-serverless.git
@@ -20,9 +40,9 @@ cd caddy-serverless
 make build
 ```
 
-### Docker
+### Docker Image
 
-You can also use a pre-built Docker image or build your own:
+You can also build a Docker image with Caddy and the serverless plugin:
 
 ```dockerfile
 FROM caddy:builder AS builder

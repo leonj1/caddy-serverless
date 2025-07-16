@@ -1,4 +1,4 @@
-.PHONY: help test integration-test lint build clean docker-test-images run-example
+.PHONY: help test integration-test lint build clean docker-test-images run-example docker-install
 
 # Default target
 help: ## Show this help message
@@ -60,6 +60,25 @@ docker-test-images: ## Build Docker test images for integration tests
 
 run-example: build ## Run Caddy with the example configuration
 	./caddy run --config example.Caddyfile --adapter caddyfile
+
+docker-install: ## Build Caddy with serverless plugin using Docker (no Go required)
+	@echo "Building Caddy with serverless plugin using Docker..."
+	@mkdir -p ./build
+	@echo "Using Docker BuildKit for efficient export..."
+	@DOCKER_BUILDKIT=1 docker build \
+		--file Dockerfile.install \
+		--output type=local,dest=./build \
+		. && \
+	chmod +x ./build/caddy && \
+	echo "" && \
+	echo "✅ Success! Caddy binary with serverless plugin created at: ./build/caddy" && \
+	echo "" && \
+	echo "To install system-wide, run:" && \
+	echo "  sudo mv ./build/caddy /usr/local/bin/caddy" && \
+	echo "" && \
+	echo "To verify installation:" && \
+	echo "  ./build/caddy version" && \
+	echo "  ./build/caddy list-modules | grep serverless"
 
 fmt: ## Format Go code
 	go fmt ./...

@@ -1,0 +1,36 @@
+# Dockerfile for building Caddy with the serverless plugin
+# This creates a Caddy binary that can be exported to the host system
+
+# Build stage - compile Caddy with serverless plugin
+FROM golang:1.23-alpine AS builder
+
+# Install required build tools
+RUN apk add --no-cache \
+    git \
+    ca-certificates
+
+# Install xcaddy for building Caddy with plugins
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+# Set up build environment
+WORKDIR /build
+
+# Copy the plugin source code
+COPY . /build/caddy-serverless/
+
+# Build Caddy with the serverless plugin
+# Using the local plugin path and Caddy v2.8.4 (compatible with Go 1.23)
+ENV CADDY_VERSION=v2.8.4
+RUN xcaddy build ${CADDY_VERSION} \
+    --with github.com/jose/caddy-serverless=/build/caddy-serverless \
+    --output /output/caddy
+
+# Verify the build
+RUN /output/caddy version && \
+    /output/caddy list-modules | grep serverless
+
+# Export stage - minimal stage just for copying the binary
+FROM scratch AS export
+
+# Copy the built binary
+COPY --from=builder /output/caddy /caddy
