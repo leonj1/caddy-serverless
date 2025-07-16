@@ -1,0 +1,29 @@
+# Test Caddyfile for plugin validation
+{
+    order serverless before file_server
+    debug
+}
+
+localhost:8080 {
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+    
+    # Simple serverless function
+    serverless {
+        function {
+            methods GET
+            path /hello
+            image alpine:latest
+            command /bin/sh -c "while true; do echo -e 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello from serverless plugin!' | nc -l -p 8080; done"
+            timeout 5s
+            port 8080
+        }
+    }
+    
+    # Catch-all
+    handle {
+        respond "Caddy Serverless Plugin Test Server" 200
+    }
+}

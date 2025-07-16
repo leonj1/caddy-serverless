@@ -1,0 +1,134 @@
+# Example Caddyfile demonstrating the Caddy serverless functions plugin
+# 
+# IMPORTANT: This plugin must be built into Caddy using xcaddy:
+# xcaddy build --with github.com/jose/caddy-serverless
+#
+# Then run with: ./caddy run --config example.Caddyfile
+
+# Global options - ensure serverless handler is ordered correctly
+{
+    order serverless before file_server
+}
+
+# Basic serverless function example
+localhost:8080 {
+    # Simple echo function using nginx
+    serverless {
+        function {
+            methods GET POST
+            path /echo
+            image nginx:alpine
+            command /bin/sh -c "echo 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello from serverless function!' | nc -l -p 8080"
+            timeout 30s
+            port 8080
+        }
+    }
+    
+    # Fallback to file server for other requests
+    file_server
+}
+
+# Advanced example with multiple functions
+api.localhost:8080 {
+    serverless {
+        # User management API
+        function {
+            methods GET POST PUT DELETE
+            path /api/users/.*
+            image node:16-alpine
+            command node -e "
+                const http = require('http');
+                const url = require('url');
+                const server = http.createServer((req, res) => {
+                    const parsedUrl = url.parse(req.url, true);
+                    res.writeHead(200, {'Content-Type': 'application/json'});
+                    res.end(JSON.stringify({
+                        method: req.method,
+                        path: parsedUrl.pathname,
+                        query: parsedUrl.query,
+                        message: 'User API endpoint'
+                    }));
+                });
+                server.listen(8080, '0.0.0.0');
+            "
+            env NODE_ENV=production
+            env API_VERSION=v1
+            timeout 60s
+            port 8080
+        }
+        
+        # File processing function with volume mount
+        function {
+            methods POST
+            path /api/process/.*
+            image python:3.9-slim
+            command python -c "
+import http.server
+import socketserver
+import json
+import os
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        
+        # List files in mounted directory
+        files = os.listdir('/data') if os.path.exists('/data') else []
+        
+        response = {
+            'message': 'File processing endpoint',
+            'files_available': files,
+            'data_received': len(post_data)
+        }
+        
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(response).encode())
+
+with socketserver.TCPServer(('', 8080), Handler) as httpd:
+    httpd.serve_forever()
+            "
+            volume /tmp:/data:ro
+            env PYTHONUNBUFFERED=1
+            timeout 120s
+            port 8080
+        }
+        
+        # Admin function with restricted access
+        function {
+            methods DELETE
+            path /api/admin/.*
+            image alpine:latest
+            command /bin/sh -c "
+                echo 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"message\": \"Admin operation completed\", \"timestamp\": \"'$(date -Iseconds)'\"}' | nc -l -p 8080
+            "
+            timeout 30s
+            port 8080
+        }
+    }
+    
+    # Health check endpoint (handled by Caddy directly)
+    respond /health 200 {
+        body "OK"
+    }
+}
+
+# Example with custom Docker image
+custom.localhost:8080 {
+    serverless {
+        function {
+            methods GET
+            path /.*
+            image my-custom-function:latest
+            command /app/start.sh
+            env DATABASE_URL=postgres://localhost/mydb
+            env REDIS_URL=redis://localhost:6379
+            volume /host/config:/app/config:ro
+            volume /host/logs:/app/logs
+            timeout 300s
+            port 3000
+        }
+    }
+}

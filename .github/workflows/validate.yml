@@ -1,0 +1,145 @@
+name: Validate Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    name: Validate Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Install xcaddy
+      run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+    
+    - name: Build Caddy with plugin
+      run: |
+        xcaddy build \
+          --with github.com/jose/caddy-serverless=.
+    
+    - name: Verify plugin loads
+      run: |
+        ./caddy version
+        ./caddy list-modules | grep -q "http.handlers.serverless" || \
+          (echo "Serverless module not found!" && exit 1)
+    
+    - name: Validate example Caddyfile
+      run: |
+        ./caddy validate --config example.Caddyfile --adapter caddyfile
+    
+    - name: Test Caddyfile parsing
+      run: |
+        cat > test.Caddyfile <<EOF
+        localhost:8080 {
+            serverless {
+                function {
+                    methods GET POST
+                    path /test
+                    image alpine:latest
+                    command echo "test"
+                    port 8080
+                }
+            }
+        }
+        EOF
+        ./caddy validate --config test.Caddyfile --adapter caddyfile
+
+  validate-tests:
+    name: Validate Tests
+    runs-on: ubuntu-latest
+    needs: validate-build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Run unit tests
+      run: go test -v -race -cover ./...
+    
+    - name: Build test Docker images
+      run: |
+        docker build -t caddy-serverless-go-echoserver-test:latest ./testdata/echoserver/
+        docker build -t caddy-serverless-py-echoserver-test:latest ./testdata/pyechoserver/
+    
+    - name: Run integration tests
+      run: go test -v -tags=integration -timeout=10m ./...
+
+  validate-functionality:
+    name: Validate Functionality
+    runs-on: ubuntu-latest
+    needs: validate-build
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Install xcaddy
+      run: go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+    
+    - name: Build Caddy with plugin
+      run: |
+        xcaddy build \
+          --with github.com/jose/caddy-serverless=.
+    
+    - name: Test basic functionality
+      run: |
+        # Create test Caddyfile
+        cat > test.Caddyfile <<EOF
+        {
+            order serverless before file_server
+        }
+        
+        localhost:8080 {
+            handle /health {
+                respond "OK" 200
+            }
+            
+            serverless {
+                function {
+                    methods GET
+                    path /test
+                    image alpine:latest
+                    command /bin/sh -c "echo 'test' | nc -l -p 8080"
+                    timeout 5s
+                    port 8080
+                }
+            }
+        }
+        EOF
+        
+        # Start Caddy in background
+        ./caddy start --config test.Caddyfile --adapter caddyfile
+        
+        # Wait for startup
+        sleep 5
+        
+        # Test health endpoint
+        curl -f http://localhost:8080/health || exit 1
+        
+        # Stop Caddy
+        ./caddy stop || true

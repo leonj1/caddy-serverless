@@ -1,0 +1,65 @@
+# .goreleaser.yml
+project_name: caddy-serverless
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - skip: true
+
+release:
+  github:
+    owner: jose
+    name: caddy-serverless
+  
+  draft: true
+  prerelease: auto
+  
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  
+  header: |
+    ## Caddy Serverless Plugin v{{.Version}}
+    
+    This release requires Caddy 2.8.4 or later.
+    
+    ### Installation
+    ```bash
+    xcaddy build --with github.com/jose/caddy-serverless@v{{.Version}}
+    ```
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^style:'
+      - '^refactor:'
+  groups:
+    - title: 'Features'
+      regexp: "^feat"
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: "^fix"
+      order: 1
+    - title: 'Performance'
+      regexp: "^perf"
+      order: 2
+    - title: 'Other changes'
+      order: 999
+
+archives:
+  - format: binary
+    name_template: "{{ .ProjectName }}_{{ .Version }}_plugin_only"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+announce:
+  skip: true
