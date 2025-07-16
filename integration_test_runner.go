@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"net/http"
 )
@@ -67,7 +67,7 @@ func TestServerlessIntegrationSuite(t *testing.T) {
 }
 
 func imageExists(ctx context.Context, cli *client.Client, imageName string) bool {
-	images, err := cli.ImageList(ctx, types.ImageListOptions{})
+	images, err := cli.ImageList(ctx, image.ListOptions{})
 	if err != nil {
 		return false
 	}

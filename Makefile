@@ -10,8 +10,24 @@ help: ## Show this help message
 test: ## Run unit tests
 	go test -v -race ./...
 
-integration-test: docker-test-images ## Run integration tests (requires Docker)
-	go test -v -tags=integration -timeout=10m ./...
+integration-test: ## Run integration tests (requires Go and Docker)
+	@if command -v go >/dev/null 2>&1; then \
+		$(MAKE) docker-test-images; \
+		go test -v -tags=integration -timeout=10m ./...; \
+	else \
+		echo "Go is not installed. Use 'make docker-integration-test' to run tests in Docker."; \
+		exit 1; \
+	fi
+
+docker-integration-test: ## Run integration tests inside Docker (no Go required)
+	@echo "Building integration test Docker image..."
+	docker build -f ../Dockerfile.integration -t caddy-serverless-integration-test ..
+	@echo "Running integration tests in Docker..."
+	@echo "Note: This requires Docker daemon access"
+	docker run --rm \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(PWD):/workspace/caddy-serverless \
+		caddy-serverless-integration-test
 
 lint: ## Run golangci-lint
 	@if command -v golangci-lint >/dev/null 2>&1; then \
