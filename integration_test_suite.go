@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )
@@ -478,7 +477,7 @@ func (ts *TestSuite) TestColdStartVsWarmRequests() {
 		for _, c := range containers {
 			if strings.Contains(c.Image, "caddy-serverless-go-echoserver-test") {
 				ts.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{})
-				ts.dockerClient.ContainerRemove(ctx, c.ID, types.ContainerRemoveOptions{})
+				ts.dockerClient.ContainerRemove(ctx, c.ID, container.RemoveOptions{})
 			}
 		}
 		
