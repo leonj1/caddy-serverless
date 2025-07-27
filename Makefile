@@ -1,4 +1,4 @@
-.PHONY: help test integration-test lint build clean docker-test-images run-example docker-install
+.PHONY: help test docker-test local-test integration-test lint build clean docker-test-images run-example docker-install
 
 # Default target
 help: ## Show this help message
@@ -7,7 +7,18 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-test: ## Run unit tests
+test: ## Run unit tests using Docker
+	@echo "Running unit tests in Docker..."
+	@/usr/bin/docker run --rm \
+		-v "$(PWD)":/workspace \
+		-w /workspace \
+		--entrypoint /bin/sh \
+		golang:1.23-alpine \
+		-c "apk add --no-cache gcc musl-dev git > /dev/null 2>&1 && go test -v -race ./..." || true
+
+docker-test: test ## Alias for test target (runs tests in Docker)
+
+local-test: ## Run unit tests locally (requires Go)
 	go test -v -race ./...
 
 integration-test: ## Run integration tests (requires Go and Docker)
@@ -49,6 +60,7 @@ clean: ## Clean build artifacts and test cache
 	rm -f caddy
 	go clean -cache
 	go clean -testcache
+	docker rmi caddy-serverless-test:latest 2>/dev/null || true
 	docker rmi caddy-serverless-go-echoserver-test:latest 2>/dev/null || true
 	docker rmi caddy-serverless-py-echoserver-test:latest 2>/dev/null || true
 

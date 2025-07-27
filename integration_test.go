@@ -106,7 +106,7 @@ func (m *MockContainerManager) SetStartContainerFunc(fn func(ctx context.Context
 // Ensure MockContainerManager implements ContainerManagerInterface
 var _ ContainerManagerInterface = (*MockContainerManager)(nil)
 
-func (m *MockContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration) error {
+func (m *MockContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error {
 	if m.shouldFail {
 		return &MockError{message: "mock container not ready"}
 	}

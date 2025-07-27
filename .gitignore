@@ -48,4 +48,6 @@ tmp/
 /go/pkg/mod/
 
 # Go build cache
-/go/build-cache/
+/go/build-cache/.go-cache/
+.go-cache/
+

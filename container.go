@@ -33,7 +33,7 @@ import (
 // allowing for easier testing and potential support for alternative container runtimes.
 type ContainerManagerInterface interface {
 	StartContainer(ctx context.Context, config ContainerConfig) (*Container, error)
-	WaitForReady(ctx context.Context, container *Container, timeout time.Duration) error
+	WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error
 	StopContainer(ctx context.Context, containerID string) error
 	Cleanup() error
 }
@@ -278,15 +278,9 @@ func (cm *ContainerManager) getContainerInfo(ctx context.Context, containerID st
 }
 
 // WaitForReady waits for the container to be ready to accept connections
-func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration) error {
+func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error {
 	deadline := time.Now().Add(timeout)
-	internalPort := 8080 // Default internal port
-	
-	// Extract internal port from config if available
-	if container.Port > 0 {
-		// For now, we assume internal port is 8080
-		// This could be made configurable in the future
-	}
+	internalPort := port // Use the configured port
 	
 	for time.Now().Before(deadline) {
 		select {

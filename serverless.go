@@ -253,7 +253,7 @@ func (h *ServerlessHandler) executeFunction(w http.ResponseWriter, r *http.Reque
 	}()
 
 	// Wait for container to be ready
-	if err := h.containerManager.WaitForReady(ctx, container, time.Duration(function.Timeout)); err != nil {
+	if err := h.containerManager.WaitForReady(ctx, container, time.Duration(function.Timeout), function.Port); err != nil {
 		h.logger.Error("container failed to become ready", zap.Error(err))
 		return caddyhttp.Error(http.StatusInternalServerError, err)
 	}
