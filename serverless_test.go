@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	goEchoServerDir         = "./testdata/echoserver"
-	goTestDockerImageName   = "caddy-serverless-go-echoserver-test"
-	pyEchoServerDir         = "./testdata/pyechoserver"
-	pyTestDockerImageName   = "caddy-serverless-py-echoserver-test"
+	goEchoServerDir          = "./testdata/echoserver"
+	goTestDockerImageName    = "caddy-serverless-go-echoserver-test"
+	pyEchoServerDir          = "./testdata/pyechoserver"
+	pyTestDockerImageName    = "caddy-serverless-py-echoserver-test"
 	commonTestDockerImageTag = "latest"
 )
 
@@ -42,7 +42,7 @@ func buildTestImage(t *testing.T, imageName, imageTag, buildContextDir string) s
 	if err := cmd.Run(); err != nil {
 		// Attempt to remove partial image if build failed
 		cleanupCmd := exec.Command("docker", "rmi", imageFullName)
-		cleanupCmd.Run() // Ignore error, just best effort
+		_ = cleanupCmd.Run() // Ignore error, just best effort
 		t.Fatalf("Failed to build Docker image %s: %v", imageFullName, err)
 	}
 	return imageFullName
@@ -141,7 +141,7 @@ func TestServerlessPlugin_PostEcho(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -251,7 +251,7 @@ func TestServerlessPlugin_PythonPostEcho(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)

@@ -1,6 +1,6 @@
 linters-settings:
   gocyclo:
-    min-complexity: 15
+    min-complexity: 35
   govet:
     enable-all: true
   gofmt:
@@ -9,6 +9,18 @@ linters-settings:
     local-prefixes: github.com/jose/caddy-serverless
   misspell:
     locale: US
+  depguard:
+    rules:
+      Main:
+        allow:
+          - $gostd
+          - github.com/caddyserver
+          - github.com/docker
+          - go.uber.org/zap
+          - github.com/stretchr/testify
+          - github.com/cenkalti/backoff
+          - github.com/Azure/go-ansiterm
+          - github.com/moby/sys
 
 linters:
   enable:
@@ -17,7 +29,6 @@ linters:
     - dogsled
     - dupl
     - errcheck
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
@@ -42,6 +53,7 @@ linters:
 
   disable:
     - gochecknoglobals
+    - gochecknoinits
     - gomnd
     - lll
     - prealloc

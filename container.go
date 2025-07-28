@@ -100,7 +100,7 @@ func validateContainerConfig(config ContainerConfig) error {
 	}
 
 	// Validate Environment variables
-	for key, _ := range config.Environment {
+	for key := range config.Environment {
 		if strings.TrimSpace(key) == "" {
 			return fmt.Errorf("environment variable key cannot be empty")
 		}
@@ -128,8 +128,8 @@ func NewContainerManager(logger *zap.Logger) *ContainerManager {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				IdleConnTimeout:     90 * time.Second,
+				MaxIdleConns:       100,
+				IdleConnTimeout:    90 * time.Second,
 				DisableCompression: true,
 			},
 		},
@@ -252,7 +252,7 @@ func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Contain
 		// With host networking, connect to localhost on the configured port
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			cm.logger.Info("container is ready", 
 				zap.String("container_id", container.ID),
 				zap.String("ip", "127.0.0.1"),
@@ -330,7 +330,7 @@ func (cm *ContainerManager) HealthCheck(ctx context.Context, container *Containe
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health check failed with status %d", resp.StatusCode)

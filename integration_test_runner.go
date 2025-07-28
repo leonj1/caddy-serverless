@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package serverless
@@ -22,7 +23,7 @@ func TestServerlessIntegrationSuite(t *testing.T) {
 	if err != nil {
 		t.Skipf("Docker not available: %v", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	ctx := context.Background()
 	if _, err := cli.Ping(ctx); err != nil {
@@ -48,7 +49,7 @@ func TestServerlessIntegrationSuite(t *testing.T) {
 	}
 	defer func() {
 		if caddyCmd != nil && caddyCmd.Process != nil {
-			caddyCmd.Process.Kill()
+			_ = caddyCmd.Process.Kill()
 		}
 	}()
 
@@ -88,7 +89,7 @@ func startCaddyServer() (*exec.Cmd, error) {
 	if _, err := os.Stat(caddyPath); os.IsNotExist(err) {
 		caddyPath = "../../../caddy" // Try from module directory
 		if _, err := os.Stat(caddyPath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("Caddy binary not found")
+			return nil, fmt.Errorf("caddy binary not found")
 		}
 	}
 

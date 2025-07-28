@@ -21,7 +21,6 @@ type TestSuite struct {
 	t            *testing.T
 	dockerClient *client.Client
 	baseURL      string
-	mu           sync.Mutex
 }
 
 // NewTestSuite creates a new test suite
@@ -105,6 +104,7 @@ func (ts *TestSuite) waitForContainer(imageName string, timeout time.Duration) (
 
 // Container Launch Tests
 
+// TestContainersNotRunningBeforeFirstRequest verifies that containers are not started until the first request.
 func (ts *TestSuite) TestContainersNotRunningBeforeFirstRequest() {
 	ts.t.Run("ContainersNotRunningBeforeFirstRequest", func(t *testing.T) {
 		// Check that no test containers are running
@@ -120,6 +120,7 @@ func (ts *TestSuite) TestContainersNotRunningBeforeFirstRequest() {
 	})
 }
 
+// TestGETRequestLaunchesGoContainer verifies that a GET request launches the Go echo server container.
 func (ts *TestSuite) TestGETRequestLaunchesGoContainer() {
 	ts.t.Run("GETRequestLaunchesGoContainer", func(t *testing.T) {
 		// Make GET request to Go endpoint
@@ -142,6 +143,7 @@ func (ts *TestSuite) TestGETRequestLaunchesGoContainer() {
 	})
 }
 
+// TestPOSTRequestLaunchesPythonContainer verifies that a POST request launches the Python echo server container.
 func (ts *TestSuite) TestPOSTRequestLaunchesPythonContainer() {
 	ts.t.Run("POSTRequestLaunchesPythonContainer", func(t *testing.T) {
 		// Make POST request to Python endpoint
@@ -171,6 +173,7 @@ func (ts *TestSuite) TestPOSTRequestLaunchesPythonContainer() {
 
 // Request/Response Tests
 
+// TestGoEchoServerReturnsCorrectResponse verifies that the Go echo server returns the expected response.
 func (ts *TestSuite) TestGoEchoServerReturnsCorrectResponse() {
 	ts.t.Run("GoEchoServerReturnsCorrectResponse", func(t *testing.T) {
 		testData := map[string]interface{}{
@@ -215,16 +218,15 @@ func (ts *TestSuite) TestGoEchoServerReturnsCorrectResponse() {
 			var sentData map[string]interface{}
 			if err := json.Unmarshal([]byte(respBody), &sentData); err != nil {
 				t.Errorf("Failed to parse echoed body: %v", err)
-			} else {
-				if sentData["message"] != testData["message"] {
-					t.Errorf("Echoed message doesn't match. Sent: %v, Got: %v", 
-						testData["message"], sentData["message"])
-				}
+			} else if sentData["message"] != testData["message"] {
+				t.Errorf("Echoed message doesn't match. Sent: %v, Got: %v", 
+					testData["message"], sentData["message"])
 			}
 		}
 	})
 }
 
+// TestPythonEchoServerReturnsCorrectResponse verifies that the Python echo server returns the expected response.
 func (ts *TestSuite) TestPythonEchoServerReturnsCorrectResponse() {
 	ts.t.Run("PythonEchoServerReturnsCorrectResponse", func(t *testing.T) {
 		testData := map[string]interface{}{
@@ -262,10 +264,8 @@ func (ts *TestSuite) TestPythonEchoServerReturnsCorrectResponse() {
 			var sentData map[string]interface{}
 			if err := json.Unmarshal([]byte(respBody), &sentData); err != nil {
 				t.Errorf("Failed to parse echoed body: %v", err)
-			} else {
-				if sentData["message"] != testData["message"] {
-					t.Errorf("Echoed message doesn't match")
-				}
+			} else if sentData["message"] != testData["message"] {
+				t.Errorf("Echoed message doesn't match")
 			}
 		} else {
 			t.Error("Response does not contain body")
@@ -275,6 +275,7 @@ func (ts *TestSuite) TestPythonEchoServerReturnsCorrectResponse() {
 
 // Container Lifecycle Tests
 
+// TestContainerReuseForSubsequentRequests verifies that containers are reused for subsequent requests.
 func (ts *TestSuite) TestContainerReuseForSubsequentRequests() {
 	ts.t.Run("ContainerReuseForSubsequentRequests", func(t *testing.T) {
 		// First request
@@ -300,12 +301,13 @@ func (ts *TestSuite) TestContainerReuseForSubsequentRequests() {
 
 		// Check if same container is still running
 		running, containerID2 := ts.isContainerRunning("caddy-serverless-go-echoserver-test")
-		if !running {
+		switch {
+		case !running:
 			t.Error("Container is not running after second request")
-		} else if containerID1 != containerID2 {
+		case containerID1 != containerID2:
 			t.Errorf("Different container ID after second request. First: %s, Second: %s", 
 				containerID1, containerID2)
-		} else {
+		default:
 			t.Log("Container was reused for subsequent request ✓")
 		}
 	})
@@ -313,6 +315,7 @@ func (ts *TestSuite) TestContainerReuseForSubsequentRequests() {
 
 // Error Handling Tests
 
+// TestBehaviorWhenImageDoesNotExist verifies the behavior when a Docker image does not exist.
 func (ts *TestSuite) TestBehaviorWhenImageDoesNotExist() {
 	ts.t.Run("BehaviorWhenImageDoesNotExist", func(t *testing.T) {
 		// This test would require a special endpoint configured with a non-existent image
@@ -321,6 +324,7 @@ func (ts *TestSuite) TestBehaviorWhenImageDoesNotExist() {
 	})
 }
 
+// TestMethodRestrictions verifies that HTTP method restrictions are enforced.
 func (ts *TestSuite) TestMethodRestrictions() {
 	ts.t.Run("TestMethodRestrictions", func(t *testing.T) {
 		// Python endpoint only accepts POST per the FastAPI implementation
@@ -339,6 +343,7 @@ func (ts *TestSuite) TestMethodRestrictions() {
 
 // Performance Tests
 
+// TestConcurrentRequestsToSameEndpoint verifies that concurrent requests to the same endpoint are handled correctly.
 func (ts *TestSuite) TestConcurrentRequestsToSameEndpoint() {
 	ts.t.Run("ConcurrentRequestsToSameEndpoint", func(t *testing.T) {
 		var wg sync.WaitGroup
@@ -402,6 +407,7 @@ func (ts *TestSuite) TestConcurrentRequestsToSameEndpoint() {
 	})
 }
 
+// TestConcurrentRequestsToDifferentEndpoints verifies that concurrent requests to different endpoints are handled correctly.
 func (ts *TestSuite) TestConcurrentRequestsToDifferentEndpoints() {
 	ts.t.Run("ConcurrentRequestsToDifferentEndpoints", func(t *testing.T) {
 		var wg sync.WaitGroup
@@ -469,6 +475,7 @@ func (ts *TestSuite) measureRequestTime(method, path string, body interface{}) (
 	return duration, nil
 }
 
+// TestColdStartVsWarmRequests verifies the performance difference between cold start and warm requests.
 func (ts *TestSuite) TestColdStartVsWarmRequests() {
 	ts.t.Run("ColdStartVsWarmRequests", func(t *testing.T) {
 		// Ensure container is not running
@@ -476,8 +483,8 @@ func (ts *TestSuite) TestColdStartVsWarmRequests() {
 		containers, _ := ts.dockerClient.ContainerList(ctx, container.ListOptions{})
 		for _, c := range containers {
 			if strings.Contains(c.Image, "caddy-serverless-go-echoserver-test") {
-				ts.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{})
-				ts.dockerClient.ContainerRemove(ctx, c.ID, container.RemoveOptions{})
+				_ = ts.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{})
+				_ = ts.dockerClient.ContainerRemove(ctx, c.ID, container.RemoveOptions{})
 			}
 		}
 		

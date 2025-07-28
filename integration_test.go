@@ -75,7 +75,7 @@ func NewMockContainerManager() *MockContainerManager {
 	}
 
 	// Set default StartContainer implementation
-	m.startContainerFn = func(ctx context.Context, config ContainerConfig) (*Container, error) {
+	m.startContainerFn = func(_ context.Context, config ContainerConfig) (*Container, error) {
 		if m.shouldFail {
 			return nil, &MockError{message: "mock container start failure"}
 		}
@@ -224,7 +224,7 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 			"remote_addr": r.RemoteAddr,
 		}
 		
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer backendServer.Close()
 

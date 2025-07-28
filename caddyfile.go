@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package serverless provides a Caddy module for running serverless functions
+// in Docker containers in response to HTTP requests.
 package serverless
 
 import (
 	"fmt"
-	"regexp" // Added for environment variable name validation
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +28,8 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 )
+
+var envVarNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func init() {
 	httpcaddyfile.RegisterHandlerDirective("serverless", parseCaddyfile)
@@ -106,8 +110,7 @@ func (h *ServerlessHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					// Regex for valid env var names: must start with a letter or underscore,
 					// and can only contain letters, numbers, or underscores.
 					// This aligns with common practices (e.g., POSIX-like, but allowing lowercase).
-					isValidName, _ := regexp.MatchString(`^[a-zA-Z_][a-zA-Z0-9_]*$`, key) // Error from MatchString is ignored as the regex is constant.
-					if !isValidName {
+					if !envVarNameRegex.MatchString(key) {
 						return d.Errf("invalid environment variable name: '%s'. Name must start with a letter or underscore, and can only contain letters, numbers, or underscores.", key)
 					}
 
