@@ -1,0 +1,126 @@
+name: ECR Cleanup
+
+on:
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Number of days to retain images'
+        required: false
+        default: '30'
+        type: string
+      dry_run:
+        description: 'Dry run (show what would be deleted)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'caddy-serverless' }}
+
+jobs:
+  cleanup:
+    name: Clean up old ECR images
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Clean up ECR images
+        env:
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "ECR Cleanup Configuration:"
+          echo "Repository: $ECR_REPOSITORY"
+          echo "Retention days: $RETENTION_DAYS"
+          echo "Dry run: $DRY_RUN"
+          echo ""
+          
+          # Get current timestamp
+          CURRENT_TIME=$(date +%s)
+          RETENTION_SECONDS=$((RETENTION_DAYS * 24 * 60 * 60))
+          
+          # Get all images
+          echo "Fetching image details..."
+          IMAGES=$(aws ecr describe-images \
+            --repository-name $ECR_REPOSITORY \
+            --region $AWS_REGION \
+            --query 'imageDetails[?imageTags!=`null`].[imageTags[0],imagePushedAt,imageSizeInBytes,imageDigest]' \
+            --output json)
+          
+          # Parse images and find old ones
+          IMAGES_TO_DELETE=()
+          TOTAL_SIZE_TO_FREE=0
+          
+          echo "$IMAGES" | jq -r '.[] | @tsv' | while IFS=$'\t' read -r tag pushed_at size digest; do
+            # Convert pushed_at to timestamp
+            PUSHED_TIMESTAMP=$(date -d "$pushed_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$pushed_at" +%s 2>/dev/null)
+            AGE=$((CURRENT_TIME - PUSHED_TIMESTAMP))
+            AGE_DAYS=$((AGE / 86400))
+            
+            # Skip 'latest' tag and recent images
+            if [[ "$tag" == "latest" ]] || [[ $AGE -lt $RETENTION_SECONDS ]]; then
+              echo "Keeping: $tag (age: ${AGE_DAYS} days)"
+              continue
+            fi
+            
+            # Mark for deletion
+            echo "Marking for deletion: $tag (age: ${AGE_DAYS} days, size: $((size / 1024 / 1024))MB)"
+            IMAGES_TO_DELETE+=("imageDigest=$digest")
+            TOTAL_SIZE_TO_FREE=$((TOTAL_SIZE_TO_FREE + size))
+          done
+          
+          # Delete old images
+          if [ ${#IMAGES_TO_DELETE[@]} -eq 0 ]; then
+            echo ""
+            echo "No images to delete."
+          else
+            echo ""
+            echo "Total images to delete: ${#IMAGES_TO_DELETE[@]}"
+            echo "Total space to free: $((TOTAL_SIZE_TO_FREE / 1024 / 1024))MB"
+            
+            if [ "$DRY_RUN" == "true" ]; then
+              echo ""
+              echo "DRY RUN: No images were actually deleted."
+            else
+              echo ""
+              echo "Deleting images..."
+              
+              # Delete in batches of 100 (AWS limit)
+              for i in $(seq 0 100 $((${#IMAGES_TO_DELETE[@]} - 1))); do
+                BATCH=("${IMAGES_TO_DELETE[@]:$i:100}")
+                if [ ${#BATCH[@]} -gt 0 ]; then
+                  aws ecr batch-delete-image \
+                    --repository-name $ECR_REPOSITORY \
+                    --region $AWS_REGION \
+                    --image-ids "${BATCH[@]}" \
+                    --output json | jq -r '.imageIds[].imageDigest'
+                fi
+              done
+              
+              echo ""
+              echo "Cleanup completed successfully!"
+            fi
+          fi
+      
+      - name: Get repository statistics
+        if: always()
+        run: |
+          echo ""
+          echo "Repository Statistics:"
+          aws ecr describe-repository-statistics \
+            --repository-name $ECR_REPOSITORY \
+            --region $AWS_REGION \
+            --output table

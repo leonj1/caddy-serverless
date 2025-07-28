@@ -1,0 +1,180 @@
+name: Deploy to VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY || 'caddy-serverless' }}
+
+jobs:
+  deploy:
+    name: Deploy to VM via Tailscale
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_CLIENT_SECRET }}
+          tags: tag:github-actions
+      
+      - name: Verify Tailscale connection
+        run: |
+          echo "Waiting for Tailscale to connect..."
+          sleep 5
+          tailscale status
+          echo "Pinging deployment server..."
+          tailscale ping ${{ secrets.DEPLOY_HOST }} -c 3
+      
+      - name: Deploy to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_URL: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.version }}
+        run: |
+          echo "Deploying version ${{ inputs.version }} to ${{ inputs.environment }}"
+          
+          # Create deployment script
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Starting deployment..."
+          IMAGE_URL="${IMAGE_URL}"
+          DEPLOY_PATH="${DEPLOY_PATH}"
+          
+          # Login to ECR
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          
+          # Pull the new image
+          echo "Pulling Docker image..."
+          docker pull "${IMAGE_URL}"
+          
+          # Stop existing container
+          echo "Stopping existing container..."
+          docker stop caddy-serverless || true
+          docker rm caddy-serverless || true
+          
+          # Backup current Caddyfile if it exists
+          if [ -f "${DEPLOY_PATH}/Caddyfile" ]; then
+            cp "${DEPLOY_PATH}/Caddyfile" "${DEPLOY_PATH}/Caddyfile.backup"
+          fi
+          
+          # Start new container
+          echo "Starting new container..."
+          docker run -d \
+            --name caddy-serverless \
+            --restart unless-stopped \
+            -p 80:80 \
+            -p 443:443 \
+            -p 2019:2019 \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${DEPLOY_PATH}/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "${DEPLOY_PATH}/data:/data" \
+            -v "${DEPLOY_PATH}/config:/config" \
+            "${IMAGE_URL}"
+          
+          # Wait for container to be healthy
+          echo "Waiting for container to be healthy..."
+          for i in {1..30}; do
+            if docker exec caddy-serverless caddy version >/dev/null 2>&1; then
+              echo "Container is healthy!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Container failed to become healthy"
+              docker logs caddy-serverless
+              exit 1
+            fi
+            sleep 2
+          done
+          
+          # Verify deployment
+          echo "Verifying deployment..."
+          curl -f http://localhost/health || exit 1
+          
+          # Cleanup old images
+          echo "Cleaning up old images..."
+          docker image prune -f
+          
+          echo "Deployment completed successfully!"
+          EOF
+          
+          # Copy deployment script to server
+          scp -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ProxyCommand="tailscale nc %h %p" \
+              deploy.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/deploy.sh
+          
+          # Execute deployment script
+          ssh -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ProxyCommand="tailscale nc %h %p" \
+              ${DEPLOY_USER}@${DEPLOY_HOST} \
+              "chmod +x /tmp/deploy.sh && IMAGE_URL='${IMAGE_URL}' DEPLOY_PATH='${DEPLOY_PATH}' /tmp/deploy.sh && rm /tmp/deploy.sh"
+      
+      - name: Post-deployment verification
+        run: |
+          echo "Verifying deployment..."
+          DEPLOY_HOST=${{ secrets.DEPLOY_HOST }}
+          
+          # Check health endpoint
+          curl -f http://${DEPLOY_HOST}/health || exit 1
+          
+          # Check container status
+          ssh -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ProxyCommand="tailscale nc %h %p" \
+              ${{ secrets.DEPLOY_USER }}@${DEPLOY_HOST} \
+              "docker ps | grep caddy-serverless"
+      
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment of version ${{ inputs.version }} to ${{ inputs.environment }} completed successfully!"
+          else
+            echo "❌ Deployment of version ${{ inputs.version }} to ${{ inputs.environment }} failed!"
+          fi
