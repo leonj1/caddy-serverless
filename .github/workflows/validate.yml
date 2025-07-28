@@ -45,6 +45,10 @@ jobs:
     - name: Test Caddyfile parsing
       run: |
         cat > test.Caddyfile <<EOF
+        {
+            order serverless before file_server
+        }
+        
         localhost:8080 {
             serverless {
                 function {
