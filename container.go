@@ -147,8 +147,8 @@ func (cm *ContainerManager) StartContainer(ctx context.Context, config Container
 	// Build docker run command
 	args := []string{"run", "-d", "--rm"}
 
-	// Add port mapping
-	args = append(args, "-p", fmt.Sprintf("0:%d", config.Port))
+	// Use host networking mode
+	args = append(args, "--network", "host")
 
 	// Add environment variables
 	for key, value := range config.Environment {
@@ -213,14 +213,15 @@ func (cm *ContainerManager) StartContainer(ctx context.Context, config Container
 
 // getContainerInfo retrieves the IP address and port mapping for a container
 func (cm *ContainerManager) getContainerInfo(ctx context.Context, containerID string, internalPort int) (*Container, error) {
-	// Get container inspect information
+	// With host networking, containers use localhost
+	// We just need to verify the container exists
 	cmd := exec.CommandContext(ctx, "docker", "inspect", containerID)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect container: %v", err)
 	}
 
-	// Parse JSON output
+	// Parse JSON output to verify container exists
 	var inspectData []map[string]interface{}
 	if err := json.Unmarshal(output, &inspectData); err != nil {
 		return nil, fmt.Errorf("failed to parse container inspect output: %v", err)
@@ -230,57 +231,17 @@ func (cm *ContainerManager) getContainerInfo(ctx context.Context, containerID st
 		return nil, fmt.Errorf("no container data returned")
 	}
 
-	containerData := inspectData[0]
-
-	// Get IP address
-	networkSettings, ok := containerData["NetworkSettings"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid NetworkSettings in container data")
-	}
-
-	ipAddress, ok := networkSettings["IPAddress"].(string)
-	if !ok || ipAddress == "" {
-		return nil, fmt.Errorf("could not get container IP address")
-	}
-
-	// Get port mapping
-	ports, ok := networkSettings["Ports"].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid Ports in container data")
-	}
-
-	portKey := fmt.Sprintf("%d/tcp", internalPort)
-	portMappings, ok := ports[portKey].([]interface{})
-	if !ok || len(portMappings) == 0 {
-		return nil, fmt.Errorf("no port mapping found for port %d", internalPort)
-	}
-
-	firstMapping, ok := portMappings[0].(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid port mapping data")
-	}
-
-	hostPortStr, ok := firstMapping["HostPort"].(string)
-	if !ok {
-		return nil, fmt.Errorf("could not get host port")
-	}
-
-	hostPort, err := strconv.Atoi(hostPortStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid host port: %v", err)
-	}
-
+	// With host networking, use localhost and the configured port
 	return &Container{
 		ID:   containerID,
-		IP:   ipAddress,
-		Port: hostPort,
+		IP:   "127.0.0.1",
+		Port: internalPort,
 	}, nil
 }
 
 // WaitForReady waits for the container to be ready to accept connections
 func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error {
 	deadline := time.Now().Add(timeout)
-	internalPort := port // Use the configured port
 	
 	for time.Now().Before(deadline) {
 		select {
@@ -289,27 +250,14 @@ func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Contain
 		default:
 		}
 
-		// Try to connect to the container's internal IP and port
-		// This is what we'll actually use for proxying
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", container.IP, internalPort), time.Second)
+		// With host networking, connect to localhost on the configured port
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
 		if err == nil {
 			conn.Close()
 			cm.logger.Info("container is ready", 
 				zap.String("container_id", container.ID),
-				zap.String("ip", container.IP),
-				zap.Int("port", internalPort))
-			return nil
-		}
-
-		// Also try the host-mapped port as a fallback
-		conn, err = net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", container.Port), time.Second)
-		if err == nil {
-			conn.Close()
-			cm.logger.Info("container is ready (via host port)", 
-				zap.String("container_id", container.ID),
-				zap.Int("host_port", container.Port))
-			// Wait a bit more to ensure internal networking is ready
-			time.Sleep(1 * time.Second)
+				zap.String("ip", "127.0.0.1"),
+				zap.Int("port", port))
 			return nil
 		}
 
