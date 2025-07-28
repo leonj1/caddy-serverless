@@ -50,7 +50,7 @@ func init() {
 //	        port 8080
 //	    }
 //	}
-func (h *ServerlessHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+func (h *Handler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	d.Next() // consume directive name
 
 	for d.NextBlock(0) {
@@ -205,10 +205,10 @@ func parseVolumeSpec(spec string) (VolumeMount, error) {
 
 // parseCaddyfile parses the serverless directive from a Caddyfile
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-	var handler ServerlessHandler
+	var handler Handler
 	err := handler.UnmarshalCaddyfile(h.Dispenser)
 	return handler, err
 }
 
 // Interface guard
-var _ caddyfile.Unmarshaler = (*ServerlessHandler)(nil)
+var _ caddyfile.Unmarshaler = (*Handler)(nil)

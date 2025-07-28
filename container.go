@@ -39,9 +39,9 @@ type ContainerManagerInterface interface {
 
 // ContainerManager manages Docker containers for serverless functions
 type ContainerManager struct {
-	logger     *zap.Logger
-	containers map[string]*Container
 	mutex      sync.RWMutex
+	containers map[string]*Container
+	logger     *zap.Logger
 	httpClient *http.Client
 }
 
@@ -241,7 +241,7 @@ func (cm *ContainerManager) getContainerInfo(ctx context.Context, containerID st
 // WaitForReady waits for the container to be ready to accept connections
 func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():

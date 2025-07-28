@@ -64,9 +64,9 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 // MockContainerManager is a mock implementation for testing
 type MockContainerManager struct {
+	startContainerFn  func(ctx context.Context, config ContainerConfig) (*Container, error)
 	containers        map[string]*Container
 	shouldFail        bool
-	startContainerFn  func(ctx context.Context, config ContainerConfig) (*Container, error)
 }
 
 func NewMockContainerManager() *MockContainerManager {
@@ -106,14 +106,14 @@ func (m *MockContainerManager) SetStartContainerFunc(fn func(ctx context.Context
 // Ensure MockContainerManager implements ContainerManagerInterface
 var _ ContainerManagerInterface = (*MockContainerManager)(nil)
 
-func (m *MockContainerManager) WaitForReady(ctx context.Context, container *Container, timeout time.Duration, port int) error {
+func (m *MockContainerManager) WaitForReady(_ context.Context, container *Container, timeout time.Duration, port int) error {
 	if m.shouldFail {
 		return &MockError{message: "mock container not ready"}
 	}
 	return nil
 }
 
-func (m *MockContainerManager) StopContainer(ctx context.Context, containerID string) error {
+func (m *MockContainerManager) StopContainer(_ context.Context, containerID string) error {
 	delete(m.containers, containerID)
 	return nil
 }
@@ -131,10 +131,10 @@ func (e *MockError) Error() string {
 	return e.message
 }
 
-// TestServerlessHandler_Integration tests the complete flow with mocked Docker
-func TestServerlessHandler_Integration(t *testing.T) {
+// TestHandler_Integration tests the complete flow with mocked Docker
+func TestHandler_Integration(t *testing.T) {
 	// Create handler with mock container manager
-	handler := &ServerlessHandler{
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods:   []string{"GET", "POST"},
@@ -175,7 +175,7 @@ func TestServerlessHandler_Integration(t *testing.T) {
 
 	// Mock next handler (should not be called)
 	nextCalled := false
-	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+	next := caddyhttp.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) error {
 		nextCalled = true
 		return nil
 	})
@@ -207,8 +207,8 @@ func TestServerlessHandler_Integration(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_FullProxyIntegration tests the complete proxy flow with a real backend server
-func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
+// TestHandler_FullProxyIntegration tests the complete proxy flow with a real backend server
+func TestHandler_FullProxyIntegration(t *testing.T) {
 	// Start a test HTTP server to act as the backend container
 	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Echo back request information to verify proxy functionality
@@ -248,7 +248,7 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 
 	// Override StartContainer to return a container pointing to our test server
 	originalStartContainer := mockCM.startContainerFn
-	mockCM.SetStartContainerFunc(func(ctx context.Context, config ContainerConfig) (*Container, error) {
+	mockCM.SetStartContainerFunc(func(_ context.Context, config ContainerConfig) (*Container, error) {
 		container := &Container{
 			ID:   "test-container-id",
 			IP:   backendHost,
@@ -259,7 +259,7 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 	})
 
 	// Create handler with the mock container manager
-	handler := &ServerlessHandler{
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods:   []string{"GET", "POST"},
@@ -290,7 +290,7 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 		req.Header.Set("User-Agent", "test-agent")
 		w := httptest.NewRecorder()
 
-		next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+		next := caddyhttp.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) error {
 			t.Error("next handler should not be called")
 			return nil
 		})
@@ -352,7 +352,7 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 		req = req.WithContext(context.Background())
 		w := httptest.NewRecorder()
 
-		next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+		next := caddyhttp.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) error {
 			t.Error("next handler should not be called")
 			return nil
 		})
@@ -404,10 +404,10 @@ func TestServerlessHandler_FullProxyIntegration(t *testing.T) {
 	mockCM.startContainerFn = originalStartContainer
 }
 
-// TestServerlessHandler_Integration_ProxyFailure tests the proxy failure path
-func TestServerlessHandler_Integration_ProxyFailure(t *testing.T) {
+// TestHandler_Integration_ProxyFailure tests the proxy failure path
+func TestHandler_Integration_ProxyFailure(t *testing.T) {
 	// Create handler with mock container manager
-	handler := &ServerlessHandler{
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods:   []string{"GET"},
@@ -464,9 +464,9 @@ func TestServerlessHandler_Integration_ProxyFailure(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_NoMatchPassesToNext tests that unmatched requests pass to next handler
-func TestServerlessHandler_NoMatchPassesToNext(t *testing.T) {
-	handler := &ServerlessHandler{
+// TestHandler_NoMatchPassesToNext tests that unmatched requests pass to next handler
+func TestHandler_NoMatchPassesToNext(t *testing.T) {
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods:   []string{"GET"},
@@ -489,7 +489,7 @@ func TestServerlessHandler_NoMatchPassesToNext(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	nextCalled := false
-	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) error {
 		nextCalled = true
 		w.WriteHeader(http.StatusOK)
 		return nil
@@ -510,9 +510,9 @@ func TestServerlessHandler_NoMatchPassesToNext(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_ContainerStartFailure tests error handling when container fails to start
-func TestServerlessHandler_ContainerStartFailure(t *testing.T) {
-	handler := &ServerlessHandler{
+// TestHandler_ContainerStartFailure tests error handling when container fails to start
+func TestHandler_ContainerStartFailure(t *testing.T) {
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods:   []string{"GET"},
@@ -560,8 +560,8 @@ func TestServerlessHandler_ContainerStartFailure(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_JSONConfiguration tests JSON configuration parsing
-func TestServerlessHandler_JSONConfiguration(t *testing.T) {
+// TestHandler_JSONConfiguration tests JSON configuration parsing
+func TestHandler_JSONConfiguration(t *testing.T) {
 	jsonConfig := `{
 		"functions": [
 			{
@@ -585,7 +585,7 @@ func TestServerlessHandler_JSONConfiguration(t *testing.T) {
 		]
 	}`
 
-	var handler ServerlessHandler
+	var handler Handler
 	err := json.Unmarshal([]byte(jsonConfig), &handler)
 	if err != nil {
 		t.Fatalf("failed to unmarshal JSON config: %v", err)
@@ -646,9 +646,9 @@ func TestServerlessHandler_JSONConfiguration(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_Cleanup tests the cleanup functionality
-func TestServerlessHandler_Cleanup(t *testing.T) {
-	handler := &ServerlessHandler{}
+// TestHandler_Cleanup tests the cleanup functionality
+func TestHandler_Cleanup(t *testing.T) {
+	handler := &Handler{}
 	mockCM := NewMockContainerManager()
 	handler.containerManager = mockCM
 
@@ -666,9 +666,9 @@ func TestServerlessHandler_Cleanup(t *testing.T) {
 	}
 }
 
-// TestServerlessHandler_MethodCaseInsensitive tests case-insensitive method matching
-func TestServerlessHandler_MethodCaseInsensitive(t *testing.T) {
-	handler := &ServerlessHandler{
+// TestHandler_MethodCaseInsensitive tests case-insensitive method matching
+func TestHandler_MethodCaseInsensitive(t *testing.T) {
+	handler := &Handler{
 		Functions: []FunctionConfig{
 			{
 				Methods: []string{"GET", "post"},

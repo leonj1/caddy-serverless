@@ -62,9 +62,9 @@ func (ts *TestSuite) makeRequest(method, path string, body interface{}) (*http.R
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
 	if err != nil {
 		return resp, nil, err
 	}
@@ -202,7 +202,7 @@ func (ts *TestSuite) TestGoEchoServerReturnsCorrectResponse() {
 		if !ok {
 			t.Error("Response does not contain headers")
 		} else {
-			if ct, ok := headers["Content-Type"]; ok {
+			if ct, ctOk := headers["Content-Type"]; ctOk {
 				if !strings.Contains(fmt.Sprint(ct), "application/json") {
 					t.Errorf("Content-Type header not passed through correctly: %v", ct)
 				}
@@ -219,7 +219,7 @@ func (ts *TestSuite) TestGoEchoServerReturnsCorrectResponse() {
 			if err := json.Unmarshal([]byte(respBody), &sentData); err != nil {
 				t.Errorf("Failed to parse echoed body: %v", err)
 			} else if sentData["message"] != testData["message"] {
-				t.Errorf("Echoed message doesn't match. Sent: %v, Got: %v", 
+				t.Errorf("Echoed message doesn't match. Sent: %v, Got: %v",
 					testData["message"], sentData["message"])
 			}
 		}

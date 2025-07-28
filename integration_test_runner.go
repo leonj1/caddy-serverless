@@ -26,8 +26,8 @@ func TestServerlessIntegrationSuite(t *testing.T) {
 	defer func() { _ = cli.Close() }()
 
 	ctx := context.Background()
-	if _, err := cli.Ping(ctx); err != nil {
-		t.Skipf("Cannot connect to Docker daemon: %v", err)
+	if _, pingErr := cli.Ping(ctx); pingErr != nil {
+		t.Skipf("Cannot connect to Docker daemon: %v", pingErr)
 	}
 
 	// Check if test images exist
@@ -54,8 +54,8 @@ func TestServerlessIntegrationSuite(t *testing.T) {
 	}()
 
 	// Wait for server to be ready
-	if err := waitForServer("http://localhost:8080/health", 30*time.Second); err != nil {
-		t.Fatalf("Caddy server did not start: %v", err)
+	if waitErr := waitForServer("http://localhost:8080/health", 30*time.Second); waitErr != nil {
+		t.Fatalf("Caddy server did not start: %v", waitErr)
 	}
 
 	// Run test suite
@@ -120,11 +120,11 @@ func waitForServer(url string, timeout time.Duration) error {
 	for time.Since(start) < timeout {
 		resp, err := client.Get(url)
 		if err == nil && resp.StatusCode == 200 {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil
 		}
 		if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

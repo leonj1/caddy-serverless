@@ -31,12 +31,12 @@ import (
 )
 
 func init() {
-	caddy.RegisterModule(ServerlessHandler{})
+	caddy.RegisterModule(Handler{})
 }
 
-// ServerlessHandler implements a serverless functions handler that executes
+// Handler implements a serverless functions handler that executes
 // Docker containers in response to HTTP requests based on configured routes.
-type ServerlessHandler struct {
+type Handler struct {
 	// Functions defines the serverless function configurations
 	Functions []FunctionConfig `json:"functions,omitempty"`
 
@@ -54,14 +54,20 @@ type methodMap map[string]map[*regexp.Regexp]*FunctionConfig
 
 // FunctionConfig represents the configuration for a single serverless function
 type FunctionConfig struct {
-	// Methods specifies the HTTP methods this function handles (GET, POST, PUT, DELETE, etc.)
-	Methods []string `json:"methods,omitempty"`
+	// Timeout specifies the maximum execution time for the function
+	Timeout caddy.Duration `json:"timeout,omitempty"`
+
+	// Port specifies the port the container listens on (default: 8080)
+	Port int `json:"port,omitempty"`
 
 	// Path specifies the URL path pattern this function handles (supports regex)
 	Path string `json:"path,omitempty"`
 
 	// Image specifies the Docker image to run
 	Image string `json:"image,omitempty"`
+
+	// Methods specifies the HTTP methods this function handles (GET, POST, PUT, DELETE, etc.)
+	Methods []string `json:"methods,omitempty"`
 
 	// Command specifies the command to run in the container
 	Command []string `json:"command,omitempty"`
@@ -72,26 +78,20 @@ type FunctionConfig struct {
 	// Volumes specifies volume mounts for the container
 	Volumes []VolumeMount `json:"volumes,omitempty"`
 
-	// Timeout specifies the maximum execution time for the function
-	Timeout caddy.Duration `json:"timeout,omitempty"`
-
-	// Port specifies the port the container listens on (default: 8080)
-	Port int `json:"port,omitempty"`
-
 	// compiled regex for path matching
 	pathRegex *regexp.Regexp
 }
 
 // CaddyModule returns the Caddy module information.
-func (ServerlessHandler) CaddyModule() caddy.ModuleInfo {
+func (Handler) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.serverless",
-		New: func() caddy.Module { return new(ServerlessHandler) },
+		New: func() caddy.Module { return new(Handler) },
 	}
 }
 
 // Provision sets up the serverless handler.
-func (h *ServerlessHandler) Provision(ctx caddy.Context) error {
+func (h *Handler) Provision(ctx caddy.Context) error {
 	h.logger = ctx.Logger()
 	if h.HTTPClient == nil {
 		h.HTTPClient = &http.Client{
@@ -147,7 +147,7 @@ func (h *ServerlessHandler) Provision(ctx caddy.Context) error {
 }
 
 // Validate ensures the configuration is valid.
-func (h ServerlessHandler) Validate() error {
+func (h Handler) Validate() error {
 	for i, fn := range h.Functions {
 		// Validate methods
 		for _, method := range fn.Methods {
@@ -180,7 +180,7 @@ func (h ServerlessHandler) Validate() error {
 }
 
 // ServeHTTP implements the HTTP handler interface.
-func (h ServerlessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 	// Find matching function
 	function := h.findMatchingFunction(r)
 	if function == nil {
@@ -198,7 +198,7 @@ func (h ServerlessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, nex
 }
 
 // findMatchingFunction finds the first function that matches the request
-func (h *ServerlessHandler) findMatchingFunction(r *http.Request) *FunctionConfig {
+func (h *Handler) findMatchingFunction(r *http.Request) *FunctionConfig {
 	requestMethod := strings.ToUpper(r.Method)
 	pathMap, methodExists := h.routeMap[requestMethod]
 
@@ -216,7 +216,7 @@ func (h *ServerlessHandler) findMatchingFunction(r *http.Request) *FunctionConfi
 }
 
 // executeFunction executes a serverless function in a Docker container
-func (h *ServerlessHandler) executeFunction(w http.ResponseWriter, r *http.Request, function *FunctionConfig) error {
+func (h *Handler) executeFunction(w http.ResponseWriter, r *http.Request, function *FunctionConfig) error {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(function.Timeout))
 	defer cancel()
 
@@ -263,7 +263,7 @@ func (h *ServerlessHandler) executeFunction(w http.ResponseWriter, r *http.Reque
 }
 
 // proxyToContainer proxies the HTTP request to the running container
-func (h *ServerlessHandler) proxyToContainer(w http.ResponseWriter, r *http.Request, container *Container, internalAppPort int) error {
+func (h *Handler) proxyToContainer(w http.ResponseWriter, r *http.Request, container *Container, internalAppPort int) error {
 	// Create request to container
 	// Use container.IP (internal IP) and internalAppPort (the port the app inside the container listens on)
 	containerURL := fmt.Sprintf("http://%s:%d%s", container.IP, internalAppPort, r.URL.Path)
@@ -312,7 +312,7 @@ func (h *ServerlessHandler) proxyToContainer(w http.ResponseWriter, r *http.Requ
 }
 
 // Cleanup cleans up resources when the handler is being shut down.
-func (h *ServerlessHandler) Cleanup() error {
+func (h *Handler) Cleanup() error {
 	if h.containerManager != nil {
 		return h.containerManager.Cleanup()
 	}
@@ -321,8 +321,8 @@ func (h *ServerlessHandler) Cleanup() error {
 
 // Interface guards
 var (
-	_ caddy.Provisioner           = (*ServerlessHandler)(nil)
-	_ caddy.Validator             = (*ServerlessHandler)(nil)
-	_ caddy.CleanerUpper          = (*ServerlessHandler)(nil)
-	_ caddyhttp.MiddlewareHandler = (*ServerlessHandler)(nil)
+	_ caddy.Provisioner           = (*Handler)(nil)
+	_ caddy.Validator             = (*Handler)(nil)
+	_ caddy.CleanerUpper          = (*Handler)(nil)
+	_ caddyhttp.MiddlewareHandler = (*Handler)(nil)
 )
