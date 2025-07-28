@@ -1,8 +1,6 @@
 name: Validate Plugin
 
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
