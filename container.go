@@ -39,10 +39,10 @@ type ContainerManagerInterface interface {
 
 // ContainerManager manages Docker containers for serverless functions
 type ContainerManager struct {
-	mutex      sync.RWMutex
 	containers map[string]*Container
 	logger     *zap.Logger
 	httpClient *http.Client
+	mutex      sync.RWMutex
 }
 
 // Container represents a running Docker container
@@ -253,7 +253,7 @@ func (cm *ContainerManager) WaitForReady(ctx context.Context, container *Contain
 		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), time.Second)
 		if err == nil {
 			_ = conn.Close()
-			cm.logger.Info("container is ready", 
+			cm.logger.Info("container is ready",
 				zap.String("container_id", container.ID),
 				zap.String("ip", "127.0.0.1"),
 				zap.Int("port", port))

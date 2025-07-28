@@ -44,8 +44,8 @@ type Handler struct {
 	// It can be overridden for testing.
 	HTTPClient *http.Client `json:"-"`
 
-	logger           *zap.Logger
 	containerManager ContainerManagerInterface
+	logger           *zap.Logger
 	routeMap         methodMap
 }
 
@@ -54,12 +54,6 @@ type methodMap map[string]map[*regexp.Regexp]*FunctionConfig
 
 // FunctionConfig represents the configuration for a single serverless function
 type FunctionConfig struct {
-	// Timeout specifies the maximum execution time for the function
-	Timeout caddy.Duration `json:"timeout,omitempty"`
-
-	// Port specifies the port the container listens on (default: 8080)
-	Port int `json:"port,omitempty"`
-
 	// Path specifies the URL path pattern this function handles (supports regex)
 	Path string `json:"path,omitempty"`
 
@@ -80,6 +74,12 @@ type FunctionConfig struct {
 
 	// compiled regex for path matching
 	pathRegex *regexp.Regexp
+
+	// Timeout specifies the maximum execution time for the function
+	Timeout caddy.Duration `json:"timeout,omitempty"`
+
+	// Port specifies the port the container listens on (default: 8080)
+	Port int `json:"port,omitempty"`
 }
 
 // CaddyModule returns the Caddy module information.
@@ -289,7 +289,11 @@ func (h *Handler) proxyToContainer(w http.ResponseWriter, r *http.Request, conta
 		h.logger.Error("failed to proxy request to container", zap.Error(err))
 		return caddyhttp.Error(http.StatusBadGateway, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			h.logger.Warn("failed to close response body", zap.Error(err))
+		}
+	}()
 
 	// Copy response headers
 	for name, values := range resp.Header {

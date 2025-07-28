@@ -305,7 +305,7 @@ func (ts *TestSuite) TestContainerReuseForSubsequentRequests() {
 		case !running:
 			t.Error("Container is not running after second request")
 		case containerID1 != containerID2:
-			t.Errorf("Different container ID after second request. First: %s, Second: %s", 
+			t.Errorf("Different container ID after second request. First: %s, Second: %s",
 				containerID1, containerID2)
 		default:
 			t.Log("Container was reused for subsequent request ✓")

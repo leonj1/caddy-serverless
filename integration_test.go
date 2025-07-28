@@ -75,7 +75,7 @@ func NewMockContainerManager() *MockContainerManager {
 	}
 
 	// Set default StartContainer implementation
-	m.startContainerFn = func(_ context.Context, config ContainerConfig) (*Container, error) {
+	m.startContainerFn = func(_ context.Context, _ ContainerConfig) (*Container, error) {
 		if m.shouldFail {
 			return nil, &MockError{message: "mock container start failure"}
 		}
@@ -106,7 +106,7 @@ func (m *MockContainerManager) SetStartContainerFunc(fn func(ctx context.Context
 // Ensure MockContainerManager implements ContainerManagerInterface
 var _ ContainerManagerInterface = (*MockContainerManager)(nil)
 
-func (m *MockContainerManager) WaitForReady(_ context.Context, container *Container, timeout time.Duration, port int) error {
+func (m *MockContainerManager) WaitForReady(_ context.Context, _ *Container, timeout time.Duration, port int) error {
 	if m.shouldFail {
 		return &MockError{message: "mock container not ready"}
 	}
@@ -248,7 +248,7 @@ func TestHandler_FullProxyIntegration(t *testing.T) {
 
 	// Override StartContainer to return a container pointing to our test server
 	originalStartContainer := mockCM.startContainerFn
-	mockCM.SetStartContainerFunc(func(_ context.Context, config ContainerConfig) (*Container, error) {
+	mockCM.SetStartContainerFunc(func(_ context.Context, _ ContainerConfig) (*Container, error) {
 		container := &Container{
 			ID:   "test-container-id",
 			IP:   backendHost,
@@ -440,7 +440,7 @@ func TestHandler_Integration_ProxyFailure(t *testing.T) {
 	// Create a test request
 	req := fakeRequest("GET", "/api/proxyfail")
 	w := httptest.NewRecorder()
-	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error { return nil })
+	next := caddyhttp.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) error { return nil })
 
 	// Execute the handler
 	err := handler.ServeHTTP(w, req, next)
@@ -539,7 +539,7 @@ func TestHandler_ContainerStartFailure(t *testing.T) {
 	req := fakeRequest("GET", "/api/test")
 	w := httptest.NewRecorder()
 
-	next := caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+	next := caddyhttp.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 
